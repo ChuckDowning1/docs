@@ -1,0 +1,95 @@
+# STATA IN PYTHON WORKFLOW DOCUMENTATION
+
+## SETUP AND INITIALIZATION
+
+# Import required packages for Stata integration
+import pandas as pd
+import os
+import numpy as np
+import stata_setup
+import sys
+stata_setup.config('C:\\Program Files\\Stata18', 'se')  # Adjust path as needed
+sys.path.append('STATA_SYSDIR/utilities')
+from pystata import stata  # noqa
+
+## DATA LOADING
+
+# Load data using pandas
+# Example: df = pd.read_csv(DATA_PATH)
+
+# Transfer pandas dataframe to Stata
+stata.run('clear')
+stata.pdataframe_to_data(df)
+
+## REGRESSION WORKFLOW
+
+# Define control variables as a local macro
+stata.run('''
+local controls var1 var2 var3 var4 var5 var6 var7 post_var1 post_var2 post_var3 post_var4 post_var5 post_var6 post_var7
+''')
+
+# Run reghdfe regression with firm and year fixed effects
+stata.run('''
+reghdfe dependent_var independent_var `controls', absorb(firm_id year) vce(cluster firm_id) noconstant
+estimates store m1
+''')
+
+# Run reghdfe regression with industry and year fixed effects
+stata.run('''
+reghdfe dependent_var independent_var `controls', absorb(industry_id year) vce(cluster industry_id) noconstant
+estimates store m2
+''')
+
+# Run additional models as needed with different independent variables or fixed effects
+# Store each model with a unique name (m3, m4, etc.)
+
+## TABLE FORMATTING AND OUTPUT
+
+# Add indicators for fixed effects and controls
+stata.run(r'''
+estadd local indfe "No"  , replace : m1 m3
+estadd local indfe "Yes" , replace : m2 m4
+estadd local firmfe "Yes"  , replace : m1 m3
+estadd local firmfe "No" , replace : m2 m4
+estadd local yearfe "Yes", replace : _all
+estadd local postcontrols "Yes", replace : _all
+
+# Generate formatted LaTeX table with proper labels and formatting
+esttab m1 m2 m3 m4 using "path/to/overleaf/project/folder/table_name.tex", ///
+                title("Descriptive Title of Analysis") ///
+                nomtitles ///
+                b(%9.3f) se(%9.3f) star(* 0.1 ** 0.05 *** 0.01) ///
+                stats(firmfe yearfe indfe postcontrols N r2, fmt(%~5s %~5s %~5s %~5s %9.0fc %9.2f) labels("Firm FEs" "Year FEs" "Industry FEs" "Post x Controls" "Observations" "$ R^2$")) ///
+                coeflabels(dependent_var "Dependent Variable" ///
+                          independent_var1 "Independent Variable 1" ///
+                          independent_var2 "Independent Variable 2" ///
+                          var1 "Control 1" ///
+                          var2 "Control 2") ///
+                keep(independent_var1 independent_var2 var1 var2 var3) ///
+                order(dependent_var independent_var1 independent_var2 var1 var2 var3) ///
+                note("Standard errors clustered at the firm or industry level aligned with the FEs") replace tex
+''')
+
+## VARIABLE NAMING BEST PRACTICES
+
+# Use descriptive variable names with consistent formatting:
+# - For interactions: post_var, varA_varB
+# - For transformations: log_var, winsorized_var
+# - For ratios: var1_var2_ratio
+# - For indicators: var_binary, has_feature
+
+## COMMON REGRESSION SPECIFICATIONS
+
+# Basic regression with firm and year fixed effects
+# reghdfe y_var x_var controls, absorb(firm_id year) vce(cluster firm_id) noconstant
+
+# Regression with industry fixed effects instead of firm fixed effects
+# reghdfe y_var x_var controls, absorb(industry_id year) vce(cluster industry_id) noconstant
+
+# Regression with interaction term as main independent variable
+# reghdfe y_var interaction_term main_effect controls, absorb(firm_id year) vce(cluster firm_id) noconstant
+
+## OUTPUT PATH CONVENTION
+
+# Always use the path format:
+# "C:\\Users\\username\\path\\to\\Overleaf\\ProjectName\\folder\\table_name.tex"
